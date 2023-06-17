@@ -6,6 +6,8 @@ from server import Server, server_port
 from definitions import DYNAMIC_OUTPUT_CONTENT, SERVER_CONNECTION_OUTPUT
 from utils import spawn_clients, generate_dynamic_headers, validate_out, validate_response_full, validate_response_full_with_dispatch
 from requests_futures.sessions import FuturesSession
+from requests import Session, exceptions
+
 
 
 def test_sanity(server_port):
@@ -13,18 +15,13 @@ def test_sanity(server_port):
         sleep(0.1)
         with FuturesSession() as session1:
             future1 = session1.get(f"http://localhost:{server_port}/output.cgi?1")
-            sleep(0.1)
-            with FuturesSession() as session2:
-                future2 = session2.get(f"http://localhost:{server_port}/output.cgi?1")
-                response = future2.result()
-                expected_headers = generate_dynamic_headers(123, 2, 0, 2)
-                expected = DYNAMIC_OUTPUT_CONTENT.format(
-                    seconds="1.0")
-                validate_response_full(response, expected_headers, expected)
+            sleep(0.1) # enough time for the first request to get processed!
+            with Session() as session2:
+                with pytest.raises(exceptions.ConnectionError):
+                    session2.get(f"http://localhost:{server_port}/output.cgi?1")
             response = future1.result()
             expected_headers = generate_dynamic_headers(123, 1, 0, 1)
-            expected = DYNAMIC_OUTPUT_CONTENT.format(
-                seconds="1.0")
+            expected = DYNAMIC_OUTPUT_CONTENT.format(seconds="1.0")
             validate_response_full(response, expected_headers, expected)
         server.send_signal(SIGINT)
         out, err = server.communicate()
@@ -46,11 +43,12 @@ def test_load(threads, queue, amount, dispatches, server_port):
         sleep(0.1)
         clients = spawn_clients(amount, server_port)
         for i in range(amount):
-            response = clients[i][1].result()
-            clients[i][0].close()
-            expected = DYNAMIC_OUTPUT_CONTENT.format(seconds=f"1.{i:0<1}")
-            expected_headers = generate_dynamic_headers(123, (i // threads) + 1, 0, (i // threads) + 1)
-            validate_response_full_with_dispatch(response, expected_headers, expected, dispatches[i])
+            if i < queue: 
+                response = clients[i][1].result()
+                clients[i][0].close()
+                expected = DYNAMIC_OUTPUT_CONTENT.format(seconds=f"1.{i:0<1}")
+                expected_headers = generate_dynamic_headers(123, (i // threads) + 1, 0, (i // threads) + 1)
+                validate_response_full_with_dispatch(response, expected_headers, expected, dispatches[i])
         server.send_signal(SIGINT)
         out, err = server.communicate()
         expected = "^" + ''.join([SERVER_CONNECTION_OUTPUT.format(

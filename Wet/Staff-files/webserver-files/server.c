@@ -247,6 +247,9 @@ START_OF_WHILE:
                         // pthread_cond_signal( &block_cond );
                         pthread_cond_wait(&block_cond_main, &m_lock); // block incoming requests   
                     }
+                    Close(connfd); // drop request after dropping all requests!
+                    pthread_mutex_unlock(&m_lock);
+                    continue;
                 break;
 
             case SCHED_DYNAMIC:
