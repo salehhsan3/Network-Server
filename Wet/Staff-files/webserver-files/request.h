@@ -26,6 +26,7 @@
 
 typedef struct {
     int fd;                             /* descriptor for handling the request*/
+    int available;                      /*a boolean value to denote whether a request is available or not*/
     struct timeval arrival_time;        /* indicates the arrival time of this specific request*/
     struct timeval picked_time;         /* indicates the picked up time of this specific request*/
     struct timeval dispatch_time;            /* indicates the dispatched time of this specific request*/
@@ -53,6 +54,9 @@ void destroyThreadInfo(threadinfo_t *tin);
 
 /* function for initializing/handling requests_t*/
 void initFd(requests_t *request, int fd);
+void updateToAvailable(requests_t *request);
+void updateToUnAvailable(requests_t *request);
+int isAvailable(requests_t *request);
 int initArrivalTimeOfRequest(requests_t *request);
 int initPickedTimeOfRequest(requests_t *request);
 void calculateIntervalOfRequest(requests_t *request);

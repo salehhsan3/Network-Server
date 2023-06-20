@@ -80,7 +80,7 @@ void getargs(int *port, int *thread_num, int *queue_size, char *sched_alg,
     }
 }
 
-void* thread_start(void *arguments)
+void* start_routine(void *arguments)
 {
     while (1)
     {
@@ -95,7 +95,7 @@ void* thread_start(void *arguments)
         requests_t* req = getData(to_add);
         initPickedTimeOfRequest(req);    
         calculateIntervalOfRequest(req); 
-        memcpy(requests_arr_per_thread + t_inc_index, req, sizeof(requests_t) ); //copy to the THREADS array.
+        memcpy(requests_arr_per_thread + t_inc_index, req, sizeof(requests_t) );
         req = (requests_t*) (requests_arr_per_thread + t_inc_index);
 
         dequeue(wait_q);
@@ -109,7 +109,7 @@ void* thread_start(void *arguments)
         t_inc_index = ((int*)arguments)[0];
         req = (requests_t*) (requests_arr_per_thread + t_inc_index);
         int saveFD = req->fd;
-        dequeueElementByRequest(worker_q, req);
+        dequeueRequest(worker_q, req);
         Close(saveFD);
 
         pthread_cond_signal( &block_cond );
@@ -125,7 +125,7 @@ void createWorkerThreads(int thread_num, int *thread_args)
     for (int i = 0; i < thread_num; i++)
     {
         thread_args[i] = i;
-        pthread_create(&thread_arr[i],NULL,(void*)thread_start, &thread_args[i]);
+        pthread_create(&thread_arr[i],NULL,(void*)start_routine, &thread_args[i]);
     }
 
     tinfo_arr = (threadinfo_t*)malloc(sizeof(threadinfo_t) * thread_num);
@@ -136,6 +136,29 @@ void createWorkerThreads(int thread_num, int *thread_args)
         initializeThreadInfo( (threadinfo_t*)(tinfo_arr + i));
         changeThreadAndTID(   (threadinfo_t*)(tinfo_arr + i), (pthread_t*)(thread_arr + i), i);
     }
+}
+
+void releaseResources(Queue wait_q, Queue worker_q, pthread_t* thread_arr, int* thread_args, threadinfo_t* tinfo_arr, requests_t* req_arr, requests_t* requests_arr_per_thread)
+{
+    destroyQueue(worker_q);
+    destroyQueue(wait_q);
+    free(thread_arr);
+    free(thread_args);
+    free(tinfo_arr);
+    free(req_arr);
+    free(requests_arr_per_thread);
+}
+
+int findFirstAvailableRequest(requests_t* req_arr, int arr_size)
+{
+    for (int i = 0; i < arr_size; i++)
+    {
+        if (isAvailable(&req_arr[i]))
+        {
+            return i;
+        }  
+    }
+    return 0;
 }
 
 int main(int argc, char *argv[])
@@ -160,40 +183,26 @@ int main(int argc, char *argv[])
 
     int *thread_args = (int*)malloc(sizeof(int) * thread_num);
     requests_t* req_arr = (requests_t*) malloc(sizeof(*req_arr) * req_arr_size);
-    requests_arr_per_thread = (requests_t*) malloc(sizeof(requests_t) * thread_num); //array of pointers to requests_t
+    for (int i = 0; i < req_arr_size; i++)
+    {
+        updateToAvailable(&req_arr[i]);
+    }
+    requests_arr_per_thread = (requests_t*) malloc(sizeof(requests_t) * thread_num); 
     thread_arr = (pthread_t*)malloc(sizeof(pthread_t) * thread_num);
 
     
 
     createWorkerThreads(thread_num, thread_args);
     listenfd = Open_listenfd(port);
-    int c = 0;
     int insert_ind = 0;
-    int insert_ind_before_mod = 0;
-    int expanded_queue = 0;
     while (1) {
 START_OF_WHILE:
 	clientlen = sizeof(clientaddr);
 	connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t *) &clientlen);
     pthread_mutex_lock(&m_lock);
-    insert_ind = c % capacityofQueue(wait_q);
-    if (insert_ind != insert_ind_before_mod && expanded_queue) //to review!
-    { 
-        // this case is relevant when insert_ind_before_mod == 0 and insert_ind != 0
-        // this could happen due to the changes in queue_size.
-        // in all other cases insert_ind_before_mod == insert_ind
-        initFd( &(req_arr[insert_ind_before_mod]), connfd );
-        initArrivalTimeOfRequest( &(req_arr[insert_ind_before_mod]));
-        expanded_queue = 0;
-    }
-    else
-    {
-        initFd( &(req_arr[insert_ind]), connfd );
-        initArrivalTimeOfRequest( &(req_arr[insert_ind]));
-    }
+    insert_ind = findFirstAvailableRequest(req_arr, req_arr_size);
     initFd( &(req_arr[insert_ind]), connfd );
     initArrivalTimeOfRequest( &(req_arr[insert_ind]));
-
 
     if ( (currentSizeOfQueue(worker_q) + currentSizeOfQueue(wait_q)) == capacityofQueue(worker_q)  ) 
     {
@@ -220,6 +229,18 @@ START_OF_WHILE:
 
                 break;
 
+            case SCHED_BF:
+                    /*-------------------------------------------------------------------------*/
+                    while ( currentSizeOfQueue(wait_q) + currentSizeOfQueue(worker_q) > 0  ) 
+                    {
+                        // pthread_cond_signal( &block_cond );
+                        pthread_cond_wait(&block_cond_main, &m_lock); // block incoming requests   
+                    }
+                    Close(connfd); // drop request after dropping all requests!
+                    pthread_mutex_unlock(&m_lock);
+                    continue;
+                break;
+
             case SCHED_DH:
                 //check if wait_q is empty or not
                 if (isQueueEmpty(wait_q) == TRUE)
@@ -235,40 +256,9 @@ START_OF_WHILE:
                     Node first_node = findNode(wait_q,1);
                     requests_t *first_data = getData(first_node);
                     Close(first_data->fd);
-                    dequeueElementByRequest(wait_q, first_data);
+                    dequeueRequest(wait_q, first_data);
                 }
 
-                break;
-
-            case SCHED_BF:
-                    /*-------------------------------------------------------------------------*/
-                    while ( currentSizeOfQueue(wait_q) + currentSizeOfQueue(worker_q) > 0  ) 
-                    {
-                        // pthread_cond_signal( &block_cond );
-                        pthread_cond_wait(&block_cond_main, &m_lock); // block incoming requests   
-                    }
-                    Close(connfd); // drop request after dropping all requests!
-                    pthread_mutex_unlock(&m_lock);
-                    continue;
-                break;
-
-            case SCHED_DYNAMIC:
-                /*-------------------------------------------------------------------------*/
-                while ( currentSizeOfQueue(wait_q) + currentSizeOfQueue(worker_q) ==  capacityofQueue(wait_q)  ) 
-                {
-                    if (!isQueueExpandable(wait_q))
-                    {
-                        goto DROP_TAIL_POLICY;
-                    }
-                    // else:
-                    Close(connfd);
-                    insert_ind_before_mod = c % capacityofQueue(wait_q);
-                    ExpandQueue(wait_q);
-                    ExpandQueue(worker_q);
-                    expanded_queue = 1;
-                    pthread_mutex_unlock(&m_lock);
-                    goto START_OF_WHILE;    
-                }
                 break;
 
             case SCHED_RAND:
@@ -291,210 +281,51 @@ START_OF_WHILE:
                         int random_id = (rand() % q_size) + 1;                        
                         q_size --;
                         to_remove --;
-
+                        Node queue_head = wait_q->head;
                         Node node_to_rem = findNode(wait_q,random_id);
+                        if (node_to_rem == queue_head)
+                        {
+                            node_to_rem = queue_head->prev;
+                        }
                         requests_t* req_to_rem = getData(node_to_rem);
-                        resetIndices(wait_q);
                         Close(req_to_rem->fd);
-                        dequeueElementByRequest(wait_q, req_to_rem);
-                        resetIndices(wait_q);
+                        dequeueRequest(wait_q, req_to_rem);
                     }
                 }
 
                 break;
+            
+            case SCHED_DYNAMIC:
+                /*-------------------------------------------------------------------------*/
+                while ( currentSizeOfQueue(wait_q) + currentSizeOfQueue(worker_q) ==  capacityofQueue(wait_q)  ) 
+                {
+                    if (!isQueueExpandable(wait_q))
+                    {
+                        goto DROP_TAIL_POLICY;
+                    }
+                    // else:
+                    ExpandQueue(wait_q);
+                    ExpandQueue(worker_q);
+                    Close(connfd);
+                    pthread_mutex_unlock(&m_lock);
+                    goto START_OF_WHILE;    
+                }
+                break;
 
         default:
-            exit(0); // if the scheduling algorithm is none of the options above then there's an error!
+            exit(0);
             break;
         }
 
     }
 
-
-
     int node_id_insert = currentSizeOfQueue(wait_q)+1;
-    enqueue(wait_q, &req_arr[c % capacityofQueue(worker_q)], node_id_insert);
-    c++;
+    enqueue(wait_q, &req_arr[insert_ind], node_id_insert);
 
     pthread_cond_signal( &block_cond );
     pthread_mutex_unlock(&m_lock);
-    // pthread_cond_signal( &block_cond );
     }
 
 
-    destroyQueue(worker_q);
-    destroyQueue(wait_q);
-    free(thread_arr);
-    free(thread_args);
-    free(tinfo_arr);
-    free(req_arr);
-    free(requests_arr_per_thread);
+    releaseResources(wait_q, worker_q, thread_arr, thread_args, tinfo_arr, req_arr, requests_arr_per_thread);
 }
-
-
-    
-
-
- 
-/* saving my work:
-
-workerthreads:
-
-// pthread_t *thread_arr = (pthread_t*)malloc(sizeof(*thread_arr)*thread_num);
-// for (int i = 0; i < thread_num; i++)
-// {
-//     // a tip by Mousa: do the mutex implementation inside of the Queue implementation so that I can test the correctness of modules as seperate parts without testing the overall homework as one!
-//     (*thread_id) = i;
-//     pthread_create(thread_arr[i],NULL,(void*)thread_start,thread_id);
-// }
-
-// threadinfo_t *tinfo_arr = (threadinfo_t*)malloc(sizeof(*tinfo_arr) * thread_num);
-// for (int i = 0; i < thread_num; i++)
-// {
-//     initializeThreadInfo(&tinfo_arr[i]);
-//     // change thread id, is the following format correct?
-//     changeThreadAndTID(&tinfo_arr[i],&thread_arr[i],i);
-// }
-
-Queue Implementation:
-
-Queue createQueue(int maxSize)
-{
-    // no need for locks because we create the queues during the time we have 1 main thread!
-    if (maxSize <= 0)
-    {
-        return NULL;
-    }
-    
-    Queue q = (Queue)malloc(sizeof(*q));
-    q->max_size = maxSize;
-    q->current_size = 0;
-    requests_t req;
-    q->head = createNode(req,-1); // for programming purposes
-    q->tail = createNode(req,-1); // for programming purposes
-    (q->head)->next = q->tail;
-    (q->tail)->prev = q->head;
-    return q;
-}
-
-int isQueueFull(Queue queue)
-{
-    // may need locks to protect against clearing a spot from the queue right after the check is done
-    if (queue->current_size == queue->max_size)
-    {
-        return TRUE; //full
-    }
-    return FALSE; // not full
-}
-
-int isQueueEmpty(Queue queue)
-{
-    // may need locks to protect against adding a spot to the queue right after the check is done
-    if (queue->current_size == 0)
-    {
-        return TRUE; //empty
-    }
-    return FALSE; // not empty
-}
-
-int currentSizeOfQueue(Queue queue)
-{
-    // can't think of a case where this requires a lock because we can also just directly access the size if we want to!
-    return(queue->current_size);
-}
-
-void enqueue(Queue queue, requests_t data, int id)
-{
-    // most definitely needs a lock to protect against queue becoming full right after one addition and then adding to it right after that!   
-    if (isQueueFull(queue) == TRUE)
-    {
-        return;
-    }
-    
-    Node to_add = createNode(data,id);
-    Node current = queue->head;
-    while (current->next != queue->tail)
-    {
-        current = current->next;
-    }
-    to_add->next = queue->tail; // last node in queue!
-    to_add->prev = current;
-    current->next = to_add;
-    queue->current_size++;
-
-}
-
-void clearQueue(Queue queue)
-{
-    //I'm not sure if this requires a lock or not becaue i think that we will call this function only at the end when we're done and have one main thread so it doesn't matter if we place a lock or not
-    if (isQueueEmpty(queue) == TRUE)
-    {
-        return;
-    }
-    Node current = queue->head->next;
-    Node to_remove;
-    while (current != queue->tail)
-    {
-        to_remove = current;
-        current = current->next;
-        free(to_remove);
-    }
-    queue->head->next = queue->tail;
-    queue->tail->prev = queue->head;
-    queue->current_size = 0;
-}
-
-void dequeueNode(Queue queue, int node_id)
-{
-    //most definitely need a lock to protect againt multiple deletions / queue becoming empty after one delete...
-    Node current = queue->head->next;
-    Node to_find = NULL;
-    while (current != queue->tail)
-    {
-        if (current->node_id == node_id)
-        {
-            to_find = current;
-            break;
-        }
-    }
-
-    if (to_find != NULL)
-    {
-        (to_find->prev)->next = to_find->next;
-        (to_find->next)->prev = to_find->prev;
-        free(to_find);
-        queue->current_size--;
-    }
-    
-    
-}
-
-Node findNode(Queue queue, int node_id)
-{
-    //most definitely requires a lock to protect against someone else removing the node we're looking for while we're looking which may result in bugs if we found it and then the other thread deleted it!
-    if (isQueueEmpty(queue) == TRUE)
-    {
-        return NULL; // this means that data doesn't exit in queue
-    }
-    
-    Node current = queue->head;
-    while (current->next != queue->tail)
-    {
-        if (current->node_id == node_id)
-        {
-            return current;
-        }
-    }
-    
-    return NULL; // this means that data doesn't exit in queue
-}
-
-void destroyQueue(Queue queue)
-{
-    clearQueue(queue);
-    free(queue->head);
-    free(queue->tail);
-    free(queue);
-}
-
-*/

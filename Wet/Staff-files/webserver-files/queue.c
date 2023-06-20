@@ -1,5 +1,10 @@
 #include "queue.h"
 
+requests_t *getData(Node node)
+{
+    return (node->data);
+}
+
 Node createNode(requests_t *req, int node_id)
 {
     Node created_node = (Node)malloc(sizeof(*created_node));
@@ -10,121 +15,9 @@ Node createNode(requests_t *req, int node_id)
     return created_node;
 }
 
-requests_t *getData(Node node)
-{
-    return (node->data);
-}
-
-int getId(Node node)
-{
-    return node->node_id;
-}
-
-Queue createQueue(int size, int maxSize)
-{
-    if (size <= 0 || size < maxSize)
-        return NULL;
-    
-    Queue q = (Queue)malloc(sizeof(*q));
-    q->size = size;
-    q->max_size = maxSize;
-    q->current_size = 0;
-    requests_t *req = NULL;
-    q->head = createNode(req,-1); 
-    q->tail = createNode(req,-1); 
-
-    q->head->prev = q->tail;
-    q->tail->next = q->head;
-
-    q->head->next = NULL;
-    q->tail->prev = NULL;
-
-    return q;
-}
-
-int isQueueFull(Queue queue)
-{
-    return (queue->current_size == queue->size);
-}
-
-int isQueueEmpty(Queue queue)
-{
-    return (queue->current_size == 0);
-}
-
-int currentSizeOfQueue(Queue queue)
-{
-    return (queue->current_size);
-}
-
-int capacityofQueue(Queue queue)
-{
-    return queue->size;
-}
-int isQueueExpandable(Queue queue)
-{
-    return(queue->size < queue->max_size);
-}
-
-void ExpandQueue(Queue queue)
-{
-    if (isQueueExpandable(queue))
-    {
-        queue->size++;
-    }
-}
-
-void enqueue(Queue queue, requests_t *data, int id)
-{
-    if (isQueueFull(queue) == TRUE)
-    {
-        return;
-    }
-    
-    Node to_add = createNode(data, id);
-
-    /* Insertion example: */
-
-    //head <--> node_3  <--> node_2  <--> node_1  <--> tail
-    
-    //   Becomes to: 
-
-    //head <--> node_3  <--> node_2  <--> node_1  <--> NEW <--> tail
-
-    //next is <--
-    //prev is -->
-
-
-    to_add->next = queue->tail->next;   //node_1 <-- NEW
-    to_add->prev = queue->tail;         //NEW --> tail
-
-    queue->tail->next->prev = to_add;   //node_1 --> NEW
-    queue->tail->next = to_add;         //NEW <-- TAIL
-
-    queue->current_size++;
-
-    //pthread_cond_signal( &(queue->cond_var) ); // signal that we're done adding new item (if queue was empty its not now!)
-    //pthread_mutex_unlock( &(queue->m_lock) );
-
-}
-
-void dequeue(Queue queue)
-{
-    while ( isQueueEmpty(queue) )
-    {
-        pthread_cond_wait( &block_cond, &m_lock ); // as long as the queue is empty keep waiting!
-    }
-    
-    Node to_remove = queue->head->prev; // by now queue must have at least one item! and it is also the oldest
-    to_remove->prev->next = to_remove->next;
-    to_remove->next->prev = to_remove->prev;
-    free(to_remove);
-    queue->current_size--;
-    resetIndices(queue);
-}
-
 Node findNode(Queue queue, int node_enum)
 {
+    // the enumeration starts from the head of the queue which is 1 and keeps going.
     Node current = queue->head->prev;
     int curr_enum = 1;
 
@@ -156,47 +49,118 @@ Node findNodeByData(Queue queue, requests_t *req_to_find)
     return NULL; 
 }
 
-int isElementInQueue(Queue queue, int node_id)
+Queue createQueue(int capacity, int maxSize)
 {
-    return (findNode(queue, node_id) != NULL);
-}
-
-int isElementInQueueByData(Queue queue, requests_t *req_to_find)
-{
-    return (findNodeByData(queue, req_to_find) != NULL);
-}
-
-void dequeueElement(Queue queue, int id)
-{
-    resetIndices(queue);
+    if (capacity <= 0 || capacity < maxSize)
+        return NULL;
     
-    Node to_find = findNode(queue, id);
-    while ( to_find == NULL )
+    Queue q = (Queue)malloc(sizeof(*q));
+    q->capacity = capacity;
+    q->max_size = maxSize;
+    q->current_size = 0;
+    requests_t *req = NULL;
+    q->head = createNode(req,-1); 
+    q->tail = createNode(req,-1); 
+
+    q->head->prev = q->tail;
+    q->tail->next = q->head;
+
+    q->head->next = NULL;
+    q->tail->prev = NULL;
+
+    return q;
+}
+
+int isQueueEmpty(Queue queue)
+{
+    return (queue->current_size == 0);
+}
+
+int isQueueFull(Queue queue)
+{
+    return (queue->current_size == queue->capacity);
+}
+
+int currentSizeOfQueue(Queue queue)
+{
+    return (queue->current_size);
+}
+
+int capacityofQueue(Queue queue)
+{
+    return queue->capacity;
+}
+int isQueueExpandable(Queue queue)
+{
+    return(queue->capacity < queue->max_size);
+}
+
+void ExpandQueue(Queue queue)
+{
+    if (isQueueExpandable(queue))
     {
-        pthread_cond_wait( &block_cond, &m_lock );
+        queue->capacity++;
     }
-
-    to_find = findNode(queue, id);
-
-    to_find->prev->next = to_find->next;
-    to_find->next->prev = to_find->prev;
-    queue->current_size--;
-    free(to_find);
-    
 }
 
-int dequeueElementByRequest(Queue queue, requests_t *req_to_find)
+/* Insertion example: */
+
+    //head <--> node_3  <--> node_2  <--> node_1  <--> tail
+    
+    //   Becomes to: 
+
+    //head <--> node_3  <--> node_2  <--> node_1  <--> NEW <--> tail
+
+    //next is <--
+    //prev is -->
+void enqueue(Queue queue, requests_t *data, int id)
+{
+    if (isQueueFull(queue) == TRUE)
+    {
+        return;
+    }
+    
+    Node to_add = createNode(data, id);
+    updateToUnAvailable(data);
+
+    to_add->next = queue->tail->next;   //node_1 <-- NEW
+    to_add->prev = queue->tail;         //NEW --> tail
+
+    queue->tail->next->prev = to_add;   //node_1 --> NEW
+    queue->tail->next = to_add;         //NEW <-- TAIL
+
+    queue->current_size++;
+}
+
+void dequeue(Queue queue)
+{
+    while ( isQueueEmpty(queue) )
+    {
+        pthread_cond_wait( &block_cond, &m_lock ); // as long as the queue is empty keep waiting!
+    }
+    
+    Node to_remove = queue->head->prev; // by now queue must have at least one item! and it is also the oldest
+    requests_t* data = to_remove->data;
+    to_remove->prev->next = to_remove->next;
+    to_remove->next->prev = to_remove->prev;
+    free(to_remove);
+    queue->current_size--;
+    updateToAvailable(data);
+}
+
+int dequeueRequest(Queue queue, requests_t *req_to_find)
 {
     
     Node to_find = findNodeByData(queue, req_to_find);
     if(to_find == NULL)
         return -1;
 
+    requests_t* data = to_find->data;
     to_find->prev->next = to_find->next;
     to_find->next->prev = to_find->prev;
     queue->current_size--;
     free(to_find);
-
+    updateToAvailable(data);
     resetIndices(queue);
     return 0;
 }
@@ -209,10 +173,13 @@ void clearQueue(Queue queue)
     }
     Node current = queue->head->prev;
     Node to_remove;
+    requests_t* data;
     while (current != queue->tail)
     {
         to_remove = current;
         current = current->prev;
+        data = current->data;
+        updateToAvailable(data);
         free(to_remove);
     }
     queue->head->prev = queue->tail;

@@ -258,6 +258,21 @@ void initFd(requests_t *request, int fd)
    request->fd = fd;
 }
 
+void updateToAvailable(requests_t *request)
+{
+   request->available = 1;
+}
+
+void updateToUnAvailable(requests_t *request)
+{
+   request->available = 0;
+}
+
+int isAvailable(requests_t *request)
+{
+   return (request->available != 0);
+}
+
 void initializeThreadInfo(threadinfo_t *tin)
 {
    /* initialize to default values*/
