@@ -90,6 +90,7 @@ void* start_routine(void *arguments)
         {
             pthread_cond_wait( &block_cond, &m_lock );
         }
+
         int t_inc_index = ((int*)arguments)[0];
         Node to_add = findNode(wait_q, 1); 
         requests_t* req = getData(to_add);
@@ -98,18 +99,19 @@ void* start_routine(void *arguments)
         memcpy(requests_arr_per_thread + t_inc_index, req, sizeof(requests_t) );
         req = (requests_t*) (requests_arr_per_thread + t_inc_index);
 
-        dequeue(wait_q);
-        int to_add_id = currentSizeOfQueue(worker_q) + 1;
-        enqueue(worker_q, req, to_add_id);
+        pop(wait_q);
+        push(worker_q, req);
 
         pthread_mutex_unlock( &m_lock );
-        requestHandle(req->fd, (threadinfo_t*) (tinfo_arr + t_inc_index), req);
+
+        requestHandle(req->fd, (threadinfo_t*)(tinfo_arr + t_inc_index), req);
+
         pthread_mutex_lock(&m_lock);
 
         t_inc_index = ((int*)arguments)[0];
-        req = (requests_t*) (requests_arr_per_thread + t_inc_index);
+        req = (requests_t*)(requests_arr_per_thread + t_inc_index);
         int request_fd = req->fd;
-        dequeueRequest(worker_q, req);
+        popRequest(worker_q, req);
         Close(request_fd);
 
         pthread_cond_signal( &block_cond );
@@ -194,10 +196,8 @@ int main(int argc, char *argv[])
     }
     requests_arr_per_thread = (requests_t*) malloc(sizeof(requests_t) * thread_num); 
     thread_arr = (pthread_t*)malloc(sizeof(pthread_t) * thread_num);
-
-    
-
     createWorkerThreads(thread_num, thread_args);
+    
     listenfd = Open_listenfd(port);
     int insert_ind = 0;
     while (1) {
@@ -211,14 +211,14 @@ START_OF_WHILE:
     updateFd( &(req_arr[insert_ind]), connfd );
     initArrivalTimeOfRequest( &(req_arr[insert_ind]));
 
-    if ( (currentSizeOfQueue(worker_q) + currentSizeOfQueue(wait_q)) == capacityofQueue(worker_q)  ) 
+    if ( (currentSizeOfQueue(worker_q) + currentSizeOfQueue(wait_q)) == capacityOfQueue(worker_q)  ) 
     {
         switch (algorithm)
         {
 
             case SCHED_BLOCK:
 
-                while ( (currentSizeOfQueue(worker_q) + currentSizeOfQueue(wait_q)) == capacityofQueue(worker_q)  ) 
+                while ( (currentSizeOfQueue(worker_q) + currentSizeOfQueue(wait_q)) == capacityOfQueue(worker_q)  ) 
                 {
                     pthread_cond_signal( &block_cond );
                     pthread_cond_wait(&block_cond_main, &m_lock); 
@@ -261,7 +261,7 @@ START_OF_WHILE:
                     Node first_node = findNode(wait_q,1);
                     requests_t *first_data = getData(first_node);
                     Close(first_data->fd);
-                    dequeueRequest(wait_q, first_data);
+                    popRequest(wait_q, first_data);
                 }
 
                 break;
@@ -283,18 +283,8 @@ START_OF_WHILE:
                     int to_remove = (int) ((q_size + 1) / 2); 
                     while ( to_remove > 0)
                     {
-                        int random_id = (rand() % q_size) + 1;                        
-                        q_size --;
                         to_remove --;
-                        Node queue_head = wait_q->head;
-                        Node node_to_rem = findNode(wait_q,random_id);
-                        if (node_to_rem == queue_head)
-                        {
-                            node_to_rem = queue_head->prev;
-                        }
-                        requests_t* req_to_rem = getData(node_to_rem);
-                        Close(req_to_rem->fd);
-                        dequeueRequest(wait_q, req_to_rem);
+                        popRandom(wait_q);
                     }
                 }
 
@@ -302,18 +292,20 @@ START_OF_WHILE:
             
             case SCHED_DYNAMIC:
                 /*-------------------------------------------------------------------------*/
-                while ( currentSizeOfQueue(wait_q) + currentSizeOfQueue(worker_q) ==  capacityofQueue(wait_q)  ) 
+                while ( currentSizeOfQueue(wait_q) + currentSizeOfQueue(worker_q) ==  capacityOfQueue(wait_q)  ) 
                 {
-                    if (!isQueueExpandable(wait_q))
+                    if ( !isQueueExpandable(wait_q) )
                     {
                         goto DROP_TAIL_POLICY;
                     }
-                    // else:
-                    ExpandQueue(wait_q);
-                    ExpandQueue(worker_q);
-                    Close(connfd);
-                    pthread_mutex_unlock(&m_lock);
-                    goto START_OF_WHILE;    
+                    else
+                    {
+                        ExpandQueue(wait_q);
+                        ExpandQueue(worker_q);
+                        Close(connfd);
+                        pthread_mutex_unlock(&m_lock);
+                        goto START_OF_WHILE;    
+                    }
                 }
                 break;
 
@@ -324,8 +316,7 @@ START_OF_WHILE:
 
     }
 
-    int node_id_insert = currentSizeOfQueue(wait_q)+1;
-    enqueue(wait_q, &req_arr[insert_ind], node_id_insert);
+    push(wait_q, &req_arr[insert_ind]);
 
     pthread_cond_signal( &block_cond );
     pthread_mutex_unlock(&m_lock);

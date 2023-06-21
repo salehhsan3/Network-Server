@@ -2,19 +2,21 @@
 #define __QUEUE_H__
 
 #include "request.h"
+#include "segel.h"
 
 pthread_mutex_t m_lock;
 pthread_cond_t block_cond;
 pthread_cond_t block_cond_main;
+
 #define TRUE 1
 #define FALSE 0
 
 struct node_t
 {
-    int node_id; /* support for this feature has been removed. However, it could be useful.*/
     requests_t *data;
     struct node_t *next;
     struct node_t *prev;
+    int node_id; /* support for this feature has been removed. However, it could be useful.*/
 };
 typedef struct node_t *Node;
 
@@ -29,21 +31,21 @@ struct queue_t
 typedef struct queue_t *Queue;
 
 requests_t *getData(Node node);
-Node createNode(requests_t *req, int node_id);
-Node findNode(Queue queue, int node_enum);
-Node findNodeByData(Queue queue, requests_t *req_to_find);
+Node allocateNode(requests_t *req);
 
 Queue createQueue(int capacity, int maxSize);
 int isQueueEmpty(Queue queue);
 int isQueueFull(Queue queue);
-int capacityofQueue(Queue queue);
-int currentSizeOfQueue(Queue queue);
+int capacityOfQueue(Queue queue);
 int isQueueExpandable(Queue queue);
-void ExpandQueue(Queue queue);
-void dequeue(Queue queue);
-void enqueue(Queue queue, requests_t *data, int id);
-int dequeueRequest(Queue queue, requests_t *req_to_find);
-void clearQueue(Queue queue);
+int ExpandQueue(Queue queue);
+int currentSizeOfQueue(Queue queue);
+void push(Queue queue, requests_t *data);
+void pop(Queue queue);
+Node findNode(Queue queue, int node_enum);
+Node findNodeByData(Queue queue, requests_t *req_to_find);
+int popRequest(Queue queue, requests_t *req_to_find);
+int popRandom(Queue queue);
 void destroyQueue(Queue queue);
 
 #endif
