@@ -45,7 +45,5 @@ void enqueue(Queue queue, requests_t *data, int id);
 int dequeueRequest(Queue queue, requests_t *req_to_find);
 void clearQueue(Queue queue);
 void destroyQueue(Queue queue);
-void resetIndices(Queue queue);
-void printQueueData(Queue q, char *qName);
 
 #endif

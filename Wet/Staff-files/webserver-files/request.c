@@ -6,7 +6,7 @@
 #include "request.h"
 
 // requestError(      fd,    filename,        "404",    "Not found", "OS-HW3 Server could not find this file");
-void requestError(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg, threadinfo_t* tinfo, requests_t* req) 
+void requestError(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg, threadinfo_t* t_info, requests_t* req) 
 {
    char buf[MAXLINE], body[MAXBUF];
 
@@ -29,10 +29,10 @@ void requestError(int fd, char *cause, char *errnum, char *shortmsg, char *longm
 
    sprintf(buf, "%sStat-Req-Arrival:: %ld.%06ld\r\n", buf, req->arrival_time.tv_sec, req->arrival_time.tv_usec);
    sprintf(buf, "%sStat-Req-Dispatch:: %ld.%06ld\r\n", buf, req->dispatch_time.tv_sec, req->dispatch_time.tv_usec);
-   sprintf(buf, "%sStat-Thread-Id:: %d\r\n", buf, tinfo->thread_id);
-   sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, tinfo->handled_requests_num);
-   sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, tinfo->static_requests_num);
-   sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, tinfo->dynamic_requests_num);
+   sprintf(buf, "%sStat-Thread-Id:: %d\r\n", buf, t_info->thread_id);
+   sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, t_info->handled_requests_num);
+   sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, t_info->static_requests_num);
+   sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, t_info->dynamic_requests_num);
 
    Rio_writen(fd, buf, strlen(buf));
    printf("%s", buf);
@@ -107,7 +107,7 @@ void requestGetFiletype(char *filename, char *filetype)
       strcpy(filetype, "text/plain");
 }
 
-void requestServeDynamic(int fd, char *filename, char *cgiargs, threadinfo_t* tinfo, requests_t* req)
+void requestServeDynamic(int fd, char *filename, char *cgiargs, threadinfo_t* t_info, requests_t* req)
 {
    char buf[MAXLINE], *emptylist[] = {NULL};
 
@@ -117,10 +117,10 @@ void requestServeDynamic(int fd, char *filename, char *cgiargs, threadinfo_t* ti
    sprintf(buf, "%sServer: OS-HW3 Web Server\r\n", buf);
    sprintf(buf, "%sStat-Req-Arrival:: %ld.%06ld\r\n", buf, req->arrival_time.tv_sec, req->arrival_time.tv_usec);
    sprintf(buf, "%sStat-Req-Dispatch:: %ld.%06ld\r\n", buf, req->dispatch_time.tv_sec, req->dispatch_time.tv_usec);
-   sprintf(buf, "%sStat-Thread-Id:: %d\r\n", buf, tinfo->thread_id);
-   sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, tinfo->handled_requests_num);
-   sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, tinfo->static_requests_num);
-   sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n", buf, tinfo->dynamic_requests_num);
+   sprintf(buf, "%sStat-Thread-Id:: %d\r\n", buf, t_info->thread_id);
+   sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, t_info->handled_requests_num);
+   sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, t_info->static_requests_num);
+   sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n", buf, t_info->dynamic_requests_num);
 
    // Content-Type and Content-Length are filled in by the forked process
    
@@ -143,7 +143,7 @@ void requestServeDynamic(int fd, char *filename, char *cgiargs, threadinfo_t* ti
 }
 
 
-void requestServeStatic(int fd, char *filename, int filesize, threadinfo_t* tinfo, requests_t* req) 
+void requestServeStatic(int fd, char *filename, int filesize, threadinfo_t* t_info, requests_t* req) 
 {
    int srcfd;
    char *srcp, filetype[MAXLINE], buf[MAXBUF];
@@ -165,10 +165,10 @@ void requestServeStatic(int fd, char *filename, int filesize, threadinfo_t* tinf
    
    sprintf(buf, "%sStat-Req-Arrival:: %ld.%06ld\r\n", buf, req->arrival_time.tv_sec, req->arrival_time.tv_usec);
    sprintf(buf, "%sStat-Req-Dispatch:: %ld.%06ld\r\n", buf, req->dispatch_time.tv_sec, req->dispatch_time.tv_usec);
-   sprintf(buf, "%sStat-Thread-Id:: %d\r\n", buf, tinfo->thread_id);
-   sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, tinfo->handled_requests_num);
-   sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, tinfo->static_requests_num);
-   sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, tinfo->dynamic_requests_num);
+   sprintf(buf, "%sStat-Thread-Id:: %d\r\n", buf, t_info->thread_id);
+   sprintf(buf, "%sStat-Thread-Count:: %d\r\n", buf, t_info->handled_requests_num);
+   sprintf(buf, "%sStat-Thread-Static:: %d\r\n", buf, t_info->static_requests_num);
+   sprintf(buf, "%sStat-Thread-Dynamic:: %d\r\n\r\n", buf, t_info->dynamic_requests_num);
 
    Rio_writen(fd, buf, strlen(buf));
 
@@ -180,7 +180,7 @@ void requestServeStatic(int fd, char *filename, int filesize, threadinfo_t* tinf
 
 // handle a request
 extern pthread_mutex_t m_lock;
-void requestHandle(int fd, threadinfo_t *tinfo, requests_t* req)
+void requestHandle(int fd, threadinfo_t *t_info, requests_t* req)
 {
    int is_static;
    struct stat sbuf;
@@ -188,21 +188,16 @@ void requestHandle(int fd, threadinfo_t *tinfo, requests_t* req)
    char filename[MAXLINE], cgiargs[MAXLINE];
    rio_t rio;
 
-
-   // pthread_mutex_unlock( &m_lock );
-
-
-
    Rio_readinitb(&rio, fd);
    Rio_readlineb(&rio, buf, MAXLINE);
    sscanf(buf, "%s %s %s", method, uri, version);
 
    printf("%s %s %s\n", method, uri, version);
 
-   incrementHandledRequests( tinfo ); //addition
+   incrementTotalHandledRequests( t_info );
 
    if (strcasecmp(method, "GET")) {
-      requestError(fd, method, "501", "Not Implemented", "OS-HW3 Server does not implement this method", tinfo, req);
+      requestError(fd, method, "501", "Not Implemented", "OS-HW3 Server does not implement this method", t_info, req);
       return;
    }
    requestReadhdrs(&rio);
@@ -210,7 +205,7 @@ void requestHandle(int fd, threadinfo_t *tinfo, requests_t* req)
    is_static = requestParseURI(uri, filename, cgiargs);
    if (stat(filename, &sbuf) < 0)
    {
-      requestError(fd, filename, "404", "Not found", "OS-HW3 Server could not find this file", tinfo, req);
+      requestError(fd, filename, "404", "Not found", "OS-HW3 Server could not find this file", t_info, req);
       return;
    }
 
@@ -218,107 +213,92 @@ void requestHandle(int fd, threadinfo_t *tinfo, requests_t* req)
    {
       if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode))
       {
-         requestError(fd, filename, "403", "Forbidden", "OS-HW3 Server could not read this file", tinfo, req);
+         requestError(fd, filename, "403", "Forbidden", "OS-HW3 Server could not read this file", t_info, req);
          return;
       }
-      incrementStaticRequests( tinfo );
-      requestServeStatic(fd, filename, sbuf.st_size, tinfo, req);
+      incrementHandledStaticRequests( t_info );
+      requestServeStatic(fd, filename, sbuf.st_size, t_info, req);
    }
    else
    {
       if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode))
       {
-         requestError(fd, filename, "403", "Forbidden", "OS-HW3 Server could not run this CGI program", tinfo, req);
+         requestError(fd, filename, "403", "Forbidden", "OS-HW3 Server could not run this CGI program", t_info, req);
          return;
       }
-      incrementDynamicRequests( tinfo ); // addition
-      requestServeDynamic(fd, filename, cgiargs, tinfo, req);
+      incrementHandledDynamicRequests( t_info );
+      requestServeDynamic(fd, filename, cgiargs, t_info, req);
    }
 }
 
-int initArrivalTimeOfRequest(requests_t *request)
+int initArrivalTimeOfRequest(requests_t *req)
 {
-   return( gettimeofday(&(request->arrival_time), NULL) );
+   return( gettimeofday(&(req->arrival_time), NULL) );
 }
 
-int initPickedTimeOfRequest(requests_t *request)
+int initPickedTimeOfRequest(requests_t *req)
 {
-   return( gettimeofday(&(request->picked_time), NULL) );
+   return( gettimeofday(&(req->picked_time), NULL) );
 }
 
-void calculateIntervalOfRequest(requests_t *request)
+void calculateIntervalOfRequest(requests_t *req)
 {
-   //timersub psudo-code:
-   //dispatch_time = picked_time - arrival_time;
-   timersub( &(request->picked_time), &(request->arrival_time), &(request->dispatch_time) );
+
+   timersub( &(req->picked_time), &(req->arrival_time), &(req->dispatch_time) );
 }
 
-void initFd(requests_t *request, int fd)
+void updateFd(requests_t *req, int fd)
 {
-   request->fd = fd;
+   req->fd = fd;
 }
 
-void updateToAvailable(requests_t *request)
+void updateToAvailable(requests_t *req)
 {
-   request->available = 1;
+   req->available = 1;
 }
 
-void updateToUnAvailable(requests_t *request)
+void updateToUnAvailable(requests_t *req)
 {
-   request->available = 0;
+   req->available = 0;
 }
 
-int isAvailable(requests_t *request)
+int isAvailable(requests_t *req)
 {
-   return (request->available != 0);
+   return (req->available != 0);
 }
 
-void initializeThreadInfo(threadinfo_t *tin)
+void initializeInfo(threadinfo_t *t_info)
 {
-   /* initialize to default values*/
-   tin->thread = NULL;
-   tin->thread_id = 0;
-   tin->static_requests_num = 0;
-   tin->dynamic_requests_num = 0;
-   tin->handled_requests_num = 0;
+   t_info->thread = NULL;
+   t_info->thread_id = 0;
+   t_info->static_requests_num = 0;
+   t_info->dynamic_requests_num = 0;
+   t_info->handled_requests_num = 0;
 }
 
-threadinfo_t* createThreadInfo() // most likely won't be used
+void changeThreadAndTheadId(threadinfo_t *t_info, pthread_t *thread, int thread_id)
 {
-   threadinfo_t *tin = (threadinfo_t*)malloc(sizeof(*tin));
-   initializeThreadInfo(tin);
-   return tin;
+   t_info->thread = thread;
+   t_info->thread_id = thread_id;
 }
 
-void changeThreadAndTID(threadinfo_t *tin, pthread_t *thread, int tid)
-{
-   tin->thread = thread;
-   tin->thread_id = tid;
-}
-
-void incrementStaticRequests(threadinfo_t *tin)
+void incrementHandledStaticRequests(threadinfo_t *t_info)
 {
    pthread_mutex_lock(&m_lock);
-   tin->static_requests_num++; 
+   t_info->static_requests_num++; 
    pthread_mutex_unlock(&m_lock);
 }
 
-void incrementDynamicRequests(threadinfo_t *tin)
+void incrementHandledDynamicRequests(threadinfo_t *t_info)
 {
    pthread_mutex_lock(&m_lock);
-   tin->dynamic_requests_num++;
+   t_info->dynamic_requests_num++;
    pthread_mutex_unlock(&m_lock);
 }
 
-void incrementHandledRequests(threadinfo_t *tin)
+void incrementTotalHandledRequests(threadinfo_t *t_info)
 {
    pthread_mutex_lock(&m_lock);
-   tin->handled_requests_num++;
+   t_info->handled_requests_num++;
    pthread_mutex_unlock(&m_lock);
-}
-
-void destroyThreadInfo(threadinfo_t *tin) // most likely won't be used
-{
-   free(tin);
-   tin = NULL;
 }

@@ -136,10 +136,10 @@ void dequeue(Queue queue)
 {
     while ( isQueueEmpty(queue) )
     {
-        pthread_cond_wait( &block_cond, &m_lock ); // as long as the queue is empty keep waiting!
+        pthread_cond_wait( &block_cond, &m_lock );
     }
     
-    Node to_remove = queue->head->prev; // by now queue must have at least one item! and it is also the oldest
+    Node to_remove = queue->head->prev; 
     requests_t* data = to_remove->data;
     to_remove->prev->next = to_remove->next;
     to_remove->next->prev = to_remove->prev;
@@ -161,7 +161,6 @@ int dequeueRequest(Queue queue, requests_t *req_to_find)
     queue->current_size--;
     free(to_find);
     updateToAvailable(data);
-    resetIndices(queue);
     return 0;
 }
 
@@ -193,30 +192,4 @@ void destroyQueue(Queue queue)
     free(queue->head);
     free(queue->tail);
     free(queue);
-}
-
-void resetIndices(Queue queue)
-{
-    Node current = queue->head->prev;
-    int curr_id = 1;
-    while (current != queue->tail)
-    {
-        current->node_id = curr_id;
-        curr_id++;
-        current = current->prev;   
-    }
-}
-
-void printQueueData(Queue q, char* qName)
-{
-    printf("Printing %s queue data(FD):\n", qName);
-    printf("HEAD --> ");
-    
-    Node current = q->head->prev;
-    while (current != q->tail)
-    {
-        printf("%d --> ", current->data->fd);
-        current = current->prev;
-    }
-    printf("TAIL\n");
 }

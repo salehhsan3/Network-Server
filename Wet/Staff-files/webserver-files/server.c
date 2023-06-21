@@ -32,19 +32,19 @@ static const char sched_bf[3]          = "bf";
 static const char sched_dynamic[8]     = "dynamic";
 static const char sched_random[7]      = "random";
 
-int pickSchedulingAlgorithm(char *sched_alg)
+int findScheduler(char *sched_alg)
 {
     if (strcmp(sched_alg,sched_block) == 0)
     {
         return SCHED_BLOCK;
     }
-    else if (strcmp(sched_alg,sched_dt) == 0)
-    {
-        return SCHED_DT;
-    }
     else if (strcmp(sched_alg,sched_dh) == 0)
     {
         return SCHED_DH;
+    }
+    else if (strcmp(sched_alg,sched_dt) == 0)
+    {
+        return SCHED_DT;
     }
     else if (strcmp(sched_alg,sched_bf) == 0)
     {
@@ -63,7 +63,7 @@ int pickSchedulingAlgorithm(char *sched_alg)
 }
 
 void getargs(int *port, int *thread_num, int *queue_size, char *sched_alg,
-             int* max_size, int* alg_option, int argc, char *argv[])
+             int* max_size, int* algorithm, int argc, char *argv[])
 {
     if (argc < 2) {
 	fprintf(stderr, "Usage: %s <port>\n", argv[0]);
@@ -73,8 +73,8 @@ void getargs(int *port, int *thread_num, int *queue_size, char *sched_alg,
     *thread_num = atoi(argv[2]);
     *queue_size = atoi(argv[3]);
     strcpy(sched_alg,argv[4]);
-    *alg_option = pickSchedulingAlgorithm(sched_alg);
-    if ( (*alg_option) == SCHED_DYNAMIC )
+    *algorithm = findScheduler(sched_alg);
+    if ( (*algorithm) == SCHED_DYNAMIC )
     {
         (*max_size) = atoi(argv[5]);
     }
@@ -108,9 +108,9 @@ void* start_routine(void *arguments)
 
         t_inc_index = ((int*)arguments)[0];
         req = (requests_t*) (requests_arr_per_thread + t_inc_index);
-        int saveFD = req->fd;
+        int request_fd = req->fd;
         dequeueRequest(worker_q, req);
-        Close(saveFD);
+        Close(request_fd);
 
         pthread_cond_signal( &block_cond );
         pthread_cond_signal( &block_cond_main );
@@ -133,8 +133,8 @@ void createWorkerThreads(int thread_num, int *thread_args)
     
     for (int i = 0; i < thread_num; i++)
     {
-        initializeThreadInfo( (threadinfo_t*)(tinfo_arr + i));
-        changeThreadAndTID(   (threadinfo_t*)(tinfo_arr + i), (pthread_t*)(thread_arr + i), i);
+        initializeInfo( (threadinfo_t*)(tinfo_arr + i));
+        changeThreadAndTheadId(   (threadinfo_t*)(tinfo_arr + i), (pthread_t*)(thread_arr + i), i);
     }
 }
 
@@ -149,7 +149,7 @@ void releaseResources(Queue wait_q, Queue worker_q, pthread_t* thread_arr, int* 
     free(requests_arr_per_thread);
 }
 
-int findFirstAvailableRequest(requests_t* req_arr, int arr_size)
+int findIndexOfFirstAvailableRequest(requests_t* req_arr, int arr_size)
 {
     for (int i = 0; i < arr_size; i++)
     {
@@ -161,17 +161,22 @@ int findFirstAvailableRequest(requests_t* req_arr, int arr_size)
     return 0;
 }
 
+void initializeLocksAndConditions(pthread_mutex_t* m_lock, pthread_cond_t* block_cond, pthread_cond_t* block_cond_main)
+{
+    pthread_mutex_init(m_lock, NULL);    
+    pthread_cond_init(block_cond, NULL); 
+    pthread_cond_init(block_cond_main, NULL);
+}
+
 int main(int argc, char *argv[])
 {
-    pthread_mutex_init(&m_lock, NULL);    
-    pthread_cond_init( &block_cond, NULL); 
-    pthread_cond_init( &block_cond_main, NULL);
+    initializeLocksAndConditions(&m_lock, &block_cond, &block_cond_main);
 
-    int listenfd, connfd, port, clientlen, queue_size, thread_num, alg_option;
+    int listenfd, connfd, port, clientlen, queue_size, thread_num, algorithm;
     int max_size = 0;
     char sched_alg[7];
     struct sockaddr_in clientaddr;
-    getargs(&port,&thread_num,&queue_size,sched_alg, &max_size, &alg_option, argc, argv);
+    getargs(&port,&thread_num,&queue_size,sched_alg, &max_size, &algorithm, argc, argv);
     int req_arr_size = (max_size >= queue_size) ? max_size : queue_size;
 
     wait_q   = createQueue(queue_size, max_size);
@@ -199,16 +204,16 @@ int main(int argc, char *argv[])
 START_OF_WHILE:
 	clientlen = sizeof(clientaddr);
 	connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t *) &clientlen);
+
     pthread_mutex_lock(&m_lock);
-    insert_ind = findFirstAvailableRequest(req_arr, req_arr_size);
-    initFd( &(req_arr[insert_ind]), connfd );
+
+    insert_ind = findIndexOfFirstAvailableRequest(req_arr, req_arr_size);
+    updateFd( &(req_arr[insert_ind]), connfd );
     initArrivalTimeOfRequest( &(req_arr[insert_ind]));
 
     if ( (currentSizeOfQueue(worker_q) + currentSizeOfQueue(wait_q)) == capacityofQueue(worker_q)  ) 
     {
-
-        // handle according to which sched_alg was given in the input!
-        switch (alg_option)
+        switch (algorithm)
         {
 
             case SCHED_BLOCK:
@@ -325,7 +330,6 @@ START_OF_WHILE:
     pthread_cond_signal( &block_cond );
     pthread_mutex_unlock(&m_lock);
     }
-
 
     releaseResources(wait_q, worker_q, thread_arr, thread_args, tinfo_arr, req_arr, requests_arr_per_thread);
 }

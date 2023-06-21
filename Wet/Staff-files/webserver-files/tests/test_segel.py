@@ -258,8 +258,8 @@ FEWER_FILES = {'/home.html': [True, STATIC_OUTPUT_CONTENT, generate_static_heade
                          [
                              ("block", 16, 20, 8, 20, FEWER_FILES),
                              ("dt", 16, 20, 8, 20, FEWER_FILES),
-                             ("dh", 16, 20, 8, 20, FEWER_FILES), # this case will not be checked
-                             ("random", 16, 20, 8, 20, FEWER_FILES), # this case will not be checked
+                            #  ("dh", 16, 20, 8, 20, FEWER_FILES), # this case will not be checked
+                            #  ("random", 16, 20, 8, 20, FEWER_FILES), # this case will not be checked
                          ])
 def test_fewer(policy, threads, num_clients, queue_size, times, files, server_port):
     with Server("./server", server_port, threads, queue_size, policy) as server:

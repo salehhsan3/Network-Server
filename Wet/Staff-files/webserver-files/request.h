@@ -43,24 +43,22 @@ typedef struct {
     int handled_requests_num;       /* number of total requests handles by this thread */
 } threadinfo_t;
 
-/* functions for initializing/handling threadinfo_t*/
-threadinfo_t* createThreadInfo();
-void initializeThreadInfo(threadinfo_t *tin);
-void changeThreadAndTID(threadinfo_t *tin, pthread_t *thread, int tid);
-void incrementStaticRequests(threadinfo_t *tin);
-void incrementDynamicRequests(threadinfo_t *tin);
-void incrementHandledRequests(threadinfo_t *tin);
-void destroyThreadInfo(threadinfo_t *tin);
+/* functions to interact with threadinfo_t*/
+void initializeInfo(threadinfo_t *t_info);
+void changeThreadAndTheadId(threadinfo_t *t_info, pthread_t *thread, int thread_id);
+void incrementHandledDynamicRequests(threadinfo_t *t_info);
+void incrementHandledStaticRequests(threadinfo_t *t_info);
+void incrementTotalHandledRequests(threadinfo_t *t_info);
 
-/* function for initializing/handling requests_t*/
-void initFd(requests_t *request, int fd);
-void updateToAvailable(requests_t *request);
-void updateToUnAvailable(requests_t *request);
-int isAvailable(requests_t *request);
-int initArrivalTimeOfRequest(requests_t *request);
-int initPickedTimeOfRequest(requests_t *request);
-void calculateIntervalOfRequest(requests_t *request);
+/* function to interact with requests_t*/
+void updateFd(requests_t *req, int fd);
+void updateToAvailable(requests_t *req);
+void updateToUnAvailable(requests_t *req);
+int isAvailable(requests_t *req);
+int initArrivalTimeOfRequest(requests_t *req);
+int initPickedTimeOfRequest(requests_t *req);
+void calculateIntervalOfRequest(requests_t *req);
 
-void requestHandle(int fd, threadinfo_t *tinfo, requests_t* req);
+void requestHandle(int fd, threadinfo_t *t_info, requests_t* req);
 
 #endif
