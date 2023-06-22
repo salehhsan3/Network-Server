@@ -33,7 +33,7 @@ typedef struct queue_t *Queue;
 requests_t *getData(Node node);
 Node allocateNode(requests_t *req);
 
-Queue createQueue(int capacity, int maxSize);
+Queue createQueue(int capacity, int maxSize, int isExpandable);
 int isQueueEmpty(Queue queue);
 int isQueueFull(Queue queue);
 int capacityOfQueue(Queue queue);

@@ -48,9 +48,9 @@ Node findNodeByData(Queue queue, requests_t *req_to_find)
     return NULL; 
 }
 
-Queue createQueue(int capacity, int maxSize)
+Queue createQueue(int capacity, int maxSize, int isExpandable)
 {
-    if (capacity <= 0 || (capacity > maxSize && maxSize > 0) )
+    if ( ( (capacity <= 0) && (!isExpandable) ) || ( (capacity > maxSize) && (maxSize > 0) ) || ( isExpandable && (maxSize == 0) ) )
         return NULL;
     
     Queue q = (Queue)malloc(sizeof(*q));

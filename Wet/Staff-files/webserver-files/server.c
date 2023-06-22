@@ -180,9 +180,9 @@ int main(int argc, char *argv[])
     struct sockaddr_in clientaddr;
     getargs(&port,&thread_num,&queue_size,sched_alg, &max_size, &algorithm, argc, argv);
     int req_arr_size = (max_size >= queue_size) ? max_size : queue_size;
-
-    wait_q   = createQueue(queue_size, max_size);
-    worker_q = createQueue(queue_size, max_size);
+    int isExpandable = (algorithm == SCHED_DYNAMIC);
+    wait_q   = createQueue(queue_size, max_size, isExpandable);
+    worker_q = createQueue(queue_size, max_size, isExpandable);
     if (wait_q == NULL || worker_q == NULL)
     {
        return 0;
