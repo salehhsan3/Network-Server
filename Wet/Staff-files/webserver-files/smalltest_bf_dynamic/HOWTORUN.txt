@@ -1,0 +1,19 @@
+unzip the files as they are in the same folder as ur server.c 
+(dont remove the scripts from the "scripts" folder)
+
+
+go to output.c and put sleep(10); below the usleep line (should be 44 if u didnt change file)
+
+make
+
+run the ./runscripts.sh
+choose which test u want 
+
+once the terminals open go to the terminal tab with the name test tab and wait for result
+
+
+remember to change ur output.c back before u submit 
+
+manually running with previous tests is still preferred since sometimes running ./client localhost 2002 home.html and having the server close it might not give any message at all 
+(its supposed to send "Rio_readlineb error: Connection reset by peer" but sometimes it doesnt  thats why its preferred to do it manually and check by urself)
+
